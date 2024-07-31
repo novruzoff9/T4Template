@@ -1,0 +1,14 @@
+﻿
+Created class for table: Employees
+Created class for table: Categories
+Created class for table: Customers
+Created class for table: Shippers
+Created class for table: Suppliers
+Created class for table: Orders
+Created class for table: Products
+Created class for table: Order Details
+Created class for table: CustomerCustomerDemo
+Created class for table: CustomerDemographics
+Created class for table: Region
+Created class for table: Territories
+Created class for table: EmployeeTerritories

@@ -1,0 +1,156 @@
+﻿<#@ template language="C#" hostspecific="true" #>
+<#@ output extension=".txt" #>
+<#@ assembly name="System.Data" #>
+<#@ import namespace="System" #>
+<#@ import namespace="System.Data" #>
+<#@ import namespace="System.Data.SqlClient" #>
+<#@ import namespace="System.IO" #>
+<#@ import namespace="System.Collections.Generic" #>
+<#@ import namespace="System.Text" #>
+
+<#
+
+// Veri tabanı bağlantı stringi
+string connection = "Server=DESKTOP-ALE5B86;Database=Northwind;Integrated Security=True;";
+
+string GetTableData(string tableName)
+            {
+                string query = $@"DECLARE @table NVARCHAR(250) = '{tableName}';
+declare @singulartable Nvarchar(250) = '{Singularize(tableName).Replace(" ", "")}';
+
+            -- Header of the class
+            DECLARE @classHeader NVARCHAR(MAX) = 'public class ' + @singulartable + '
+{{
+';
+
+-- Footer of the class
+DECLARE @classFooter NVARCHAR(MAX) = '}}';
+
+-- Query to generate the properties
+DECLARE @properties NVARCHAR(MAX) = (
+SELECT STRING_AGG(CONCAT(
+'    public ',
+IIF(DATA_TYPE = 'nvarchar', 'string' + IIF(IS_NULLABLE = 'YES', '?', ''), ''),
+IIF(DATA_TYPE = 'uniqueidentifier', 'string' + IIF(IS_NULLABLE = 'YES', '?', ''), ''),
+IIF(DATA_TYPE = 'ntext', 'string' + IIF(IS_NULLABLE = 'YES', '?', ''), ''),
+IIF(DATA_TYPE = 'nchar', 'string' + IIF(IS_NULLABLE = 'YES', '?', ''), ''),
+IIF(DATA_TYPE = 'int', 'int' + IIF(IS_NULLABLE = 'YES', '?', ''), ''),
+IIF(DATA_TYPE = 'smallint', 'short' + IIF(IS_NULLABLE = 'YES', '?', ''), ''),
+IIF(DATA_TYPE = 'tinyint', 'byte' + IIF(IS_NULLABLE = 'YES', '?', ''), ''),
+IIF(DATA_TYPE = 'money', 'decimal' + IIF(IS_NULLABLE = 'YES', '?', ''), ''),
+IIF(DATA_TYPE = 'float', 'float' + IIF(IS_NULLABLE = 'YES', '?', ''), ''),
+IIF(DATA_TYPE = 'decimal', 'decimal' + IIF(IS_NULLABLE = 'YES', '?', ''), ''),
+IIF(DATA_TYPE = 'bit', 'bool' + IIF(IS_NULLABLE = 'YES', '?', ''), ''),
+IIF(DATA_TYPE = 'datetime', 'DateTime' + IIF(IS_NULLABLE = 'YES', '?', ''), ''),
+IIF(DATA_TYPE = 'date', 'DateTime' + IIF(IS_NULLABLE = 'YES', '?', ''), ''),
+IIF(DATA_TYPE = 'datetime2', 'DateTime' + IIF(IS_NULLABLE = 'YES', '?', ''), ''),
+IIF(DATA_TYPE = 'image', 'byte[]' + IIF(IS_NULLABLE = 'YES', '?', ''), ''),
+IIF(DATA_TYPE = 'real', 'float' + IIF(IS_NULLABLE = 'YES', '?', ''), ''),
+' ',
+COLUMN_NAME,
+' {{ get; set; }}',
+IIF((DATA_TYPE = 'nvarchar' OR DATA_TYPE = 'nchar') AND IS_NULLABLE = 'NO', ' = null!;', ''),
+CHAR(13), CHAR(10)
+), '') AS properties
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = @table
+AND TABLE_SCHEMA = 'dbo'
+);
+
+-- Combine header, properties, and footer to form the complete class definition
+DECLARE @classDefinition NVARCHAR(MAX) = @classHeader + @properties + @classFooter;
+
+-- Return the complete class definition
+SELECT @classDefinition;";
+
+
+
+                SqlConnection conn = new SqlConnection(connection);
+                SqlCommand cmd = new SqlCommand(query, conn);
+                conn.Open();
+
+
+                var d = cmd.ExecuteScalar();
+                conn.Close();
+
+
+                return $@"using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace T4Template.Models
+{{
+{HocaninObsessifligiIcin(d.ToString())}}}";
+}
+
+static string HocaninObsessifligiIcin(string obsessifolmayan)
+{
+    var lines = obsessifolmayan.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+    StringBuilder obsessifolan = new();
+
+    foreach (var line in lines)
+    {
+        obsessifolan.Append(new string(' ', 4));
+        obsessifolan.AppendLine(line);
+    }
+    return obsessifolan.ToString();
+}
+
+
+string Singularize(string plural)
+{
+    string singular = plural switch
+    {
+        "Employees" => "Employee",
+        "Categories" => "Category",
+        "Customers" => "Customer",
+        "Shippers" => "Shipper",
+        "Suppliers" => "Supplier",
+        "Orders" => "Order",
+        "Products" => "Product",
+        "Order Details" => "Order Detail",
+        "CustomerCustomerDemo" => "CustomerCustomerDemo",
+        "CustomerDemographics" => "CustomerDemographic",
+        "Region" => "Region",
+        "Territories" => "Territory",
+        "EmployeeTerritories" => "EmployeeTerritory",
+        _ => plural // Default case if no match is found
+    };
+    return singular;
+}
+
+// Klasör oluşturma yolu
+string folderPath = Path.Combine(Host.ResolvePath("."), "Models");
+
+// Klasör yoksa oluştur
+if (!Directory.Exists(folderPath)) {
+    Directory.CreateDirectory(folderPath);
+}
+
+// Tablo adlarını al
+var tableNames = new List<string>();
+
+// Veri tabanı bağlantısı
+using (SqlConnection con = new SqlConnection(connection)) {
+    using (SqlCommand cmd = new SqlCommand("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_CATALOG='Northwind'", con)) {
+        con.Open();
+
+        using (SqlDataReader reader = cmd.ExecuteReader()) {
+            while (reader.Read()) {
+                tableNames.Add(reader[0].ToString());
+            }
+        }
+    }
+}
+
+
+// Oluşturulan tablo adlarını yazdırın
+foreach (var tableName in tableNames) {
+    string filePath = Path.Combine(folderPath, $"{Singularize(tableName).Replace(" ", "")}.cs");
+    File.WriteAllText(filePath, GetTableData(tableName));
+    WriteLine($"Created class for table: {tableName}");
+}
+
+#>
